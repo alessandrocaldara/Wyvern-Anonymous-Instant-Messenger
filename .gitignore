@@ -1,0 +1,51 @@
+# Environnements virtuels Python
+venv/
+.pyenv
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Fichiers IDE (PyCharm, VSCode, etc.)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Fichiers de configuration locale
+.env
+.env.local
+.env*.local
+
+# Fichiers de base de données et Docker
+dbdata/
+docker-data/
+*.sock
+mysql/
+sys/
+performance_schema/
+#innodb_temp/
+#innodb_redo/
+
+# Fichiers de build et cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Fichiers système et temporaires
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Fichiers de configuration spécifiques à l'utilisateur
+pyvenv.cfg
+.db_wyvern.sql
+
+# Dossiers de dépendances
+Lib/
+Scripts/
+Include/
+
+

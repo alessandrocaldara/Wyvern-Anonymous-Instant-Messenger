@@ -1,0 +1,27 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: wyvern_db
+    environment:
+      MYSQL_ROOT_PASSWORD: wyvern_admin
+      MYSQL_DATABASE: db_wyvern
+      MYSQL_USER: wyvern_user
+      MYSQL_PASSWORD: wyvern_user
+    ports:
+      - "6033:3306"
+    volumes:
+      - ./dbdata:/var/lib/mysql
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: pma
+    links:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+    restart: always
+    ports:
+      - 8080:80
+volumes:
+  dbdata:
