@@ -10,7 +10,7 @@ services:
     ports:
       - "6033:3306"
     volumes:
-      - ./dbdata:/var/lib/mysql
+      - ./database/dbdata:/var/lib/mysql
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: pma
