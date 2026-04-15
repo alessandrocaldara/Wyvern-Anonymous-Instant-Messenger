@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Inscription{% endblock %}
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1 class="logo">Wyvern</h1>
+            <p class="subtitle">Créer un compte</p>
+        </div>
+
+        <!-- formulaire d'inscription -->
+        <div class="auth-form" id="register-form">
+            <div class="form-group">
+                <label for="pseudo">Pseudo <span class="required">*</span></label>
+                <input type="text" id="pseudo" placeholder="Entre 3 et 50 caractères" autocomplete="username" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Mot de passe <span class="required">*</span></label>
+                <input type="password" id="password" placeholder="Au moins 6 caractères" autocomplete="new-password" />
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email <span class="optional">(facultatif)</span></label>
+                <input type="email" id="email" placeholder="optionnel@exemple.com" autocomplete="email" />
+            </div>
+
+            <button id="registerBtn" class="btn btn-primary">Créer mon compte</button>
+
+            <div id="error-msg" class="error-msg"></div>
+
+            <p class="auth-link">
+                Déjà un compte? <a href="/login">Se connecter</a>
+            </p>
+        </div>
+
+        <!-- Résultat après inscription réussie -->
+        <div class="auth-form" id="success-card" style="display: none;">
+            <div class="success-box">
+                <h2>Compte créé!!</h2>
+                <p>Votre code unique de connexion:</p>
+                <div class="code-display" id="code-display"></div>
+                <p class="code-warning">
+                     <strong>Conservez ce code précieusement!!</strong><br>
+                    Il vous permet de vous connecter de manière anonyme, sans pseudo ni email.
+                </p>
+                <button class="btn btn-secondary" id="copyCodeBtn">Copier le code</button>
+            </div>
+            <a href="/login" class="btn btn-primary" style="text-align: center; margin-top: 1rem;">
+                Aller à la page de connexion
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('registerBtn').addEventListener('click', doRegister);
+
+    // Entrée pour soumettre
+    document.querySelectorAll('#pseudo, #password, #email').forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doRegister();
+        });
+    });
+
+    async function doRegister() {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        const password = document.getElementById('password').value;
+        const email = document.getElementById('email').value.trim();
+        const errorEl = document.getElementById('error-msg');
+        errorEl.textContent = '';
+
+        // Validation côté client
+        if (!pseudo || !password) {
+            errorEl.textContent = 'Pseudo et mot de passe sont requis.';
+            return;
+        }
+        if (pseudo.length < 3 || pseudo.length > 50) {
+            errorEl.textContent = 'Le pseudo doit faire entre 3 et 50 caractères.';
+            return;
+        }
+        if (password.length < 6) {
+            errorEl.textContent = 'Le mot de passe doit faire au moins 6 caractères.';
+            return;
+        }
+
+        const btn = document.getElementById('registerBtn');
+        btn.disabled = true;
+        btn.textContent = 'Création...';
+
+        try {
+            const res = await fetch('/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pseudo,
+                    password,
+                    email: email || null
+                })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                // Masquer le formulaire, afficher le code
+                document.getElementById('register-form').style.display = 'none';
+                document.getElementById('success-card').style.display = 'block';
+                document.getElementById('code-display').textContent = data.code_16_chiffres;
+
+                // Bouton copier
+                document.getElementById('copyCodeBtn').addEventListener('click', () => {
+                    navigator.clipboard.writeText(data.code_16_chiffres).then(() => {
+                        document.getElementById('copyCodeBtn').textContent = 'Copié !';
+                        setTimeout(() => {
+                            document.getElementById('copyCodeBtn').textContent = 'Copier le code';
+                        }, 2000);
+                    });
+                });
+            } else {
+                errorEl.textContent = data.error;
+            }
+        } catch (err) {
+            errorEl.textContent = 'Erreur de connexion au serveur.';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Créer mon compte';
+        }
+    }
+</script>
+{% endblock %}

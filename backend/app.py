@@ -1,7 +1,4 @@
-"""
-Wyvern — Point d'entrée de l'application Flask.
-"""
-from flask import Flask 
+from flask import Flask, session, redirect
 from flask_cors import CORS
 from config import Config
 from extensions import db, socketio
@@ -21,12 +18,27 @@ def create_app():
     CORS(app)
     socketio.init_app(app)
 
-    # Route de test
+    #Importer les modèles pour que SQLAlchemy les connaisse
+    import models  # noqa: F401
+
+    #Enregistrer les blueprints
+    from routes.auth import auth_bp
+    app.register_blueprint(auth_bp)
+
+    #routes principales
     @app.route('/')
     def index():
-        return '<h1>Wyvern is alive!</h1>'
+        if 'user_id' in session:
+            return redirect('/chat')
+        return redirect('/login')
 
-    # Route de vérification de la BDD
+    @app.route('/chat')
+    def chat():
+        if 'user_id' not in session:
+            return redirect('/login')
+        return f'<h1>Bienvenue {session["pseudo"]} !</h1>'
+
+    #route de vérification de la bdd
     @app.route('/health')
     def health():
         try:
