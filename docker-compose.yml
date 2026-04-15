@@ -11,6 +11,13 @@ services:
       - "6033:3306"
     volumes:
       - ./database/dbdata:/var/lib/mysql
+      - ./database/sql/db_wyvern.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pwyvern_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: pma
@@ -23,5 +30,22 @@ services:
     restart: always
     ports:
       - 8080:80
+
+  backend:
+    build: ./backend
+    container_name: wyvern_backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - ./frontend:/frontend
+    environment:
+      DATABASE_URL: "mysql+pymysql://wyvern_user:wyvern_user@db:3306/db_wyvern"
+      SECRET_KEY: "wyvern-secret-key-dev"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
 volumes:
   dbdata:
