@@ -1,7 +1,7 @@
 """
 Wyvern — Point d'entrée de l'application Flask.
 """
-from flask import Flask
+from flask import Flask 
 from flask_cors import CORS
 from config import Config
 from extensions import db, socketio
