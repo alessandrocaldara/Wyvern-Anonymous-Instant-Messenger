@@ -25,6 +25,10 @@ def create_app():
     from routes.auth import auth_bp
     app.register_blueprint(auth_bp)
 
+    from routes.servers import servers_bp
+    from routes.channels import channels_bp
+    app.register_blueprint(servers_bp)
+    app.register_blueprint(channels_bp)
     #routes principales
     @app.route('/')
     def index():
