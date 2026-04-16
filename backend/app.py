@@ -1,6 +1,4 @@
 from flask import Flask, session, redirect
-from flask_socketio import SocketIO
-from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from config import Config
 from extensions import db, socketio
@@ -16,24 +14,27 @@ def create_app():
     app.config.from_object(Config)
 
     # Initialiser les extensions
-    db= SQLAlchemy(app)
+    db.init_app(app)
     CORS(app)
-    socketio = SocketIO(app, cors_allowed_origins="*")
+    socketio.init_app(app)
 
-    #Importer les modèles pour que SQLAlchemy les connaisse
-    #import models  # noqa: F401
+    # Importer les modèles pour que SQLAlchemy les connaisse
+    import models  # noqa: F401
 
-    #Enregistrer les blueprints
+    # Enregistrer les blueprints
     from routes.auth import auth_bp
-    app.register_blueprint(auth_bp)
-    from routes.messages import messages_bp
-    app.register_blueprint(messages_bp)
     from routes.servers import servers_bp
     from routes.channels import channels_bp
+    from routes.messages import messages_bp
+    app.register_blueprint(auth_bp)
     app.register_blueprint(servers_bp)
     app.register_blueprint(channels_bp)
-    
-    #routes principales
+    app.register_blueprint(messages_bp)
+
+    # Importer les événements WebSocket (enregistrement par décorateurs)
+    import sockets  # noqa: F401
+
+    # Routes principales
     @app.route('/')
     def index():
         if 'user_id' in session:
@@ -44,17 +45,16 @@ def create_app():
     def chat():
         if 'user_id' not in session:
             return redirect('/login')
-        from flask import render_template
-        return render_template('chat.html')
+        return f'<h1>Bienvenue {session["pseudo"]} !</h1><p>Le chat arrive bientôt...</p>'
 
-    #route de vérification de la bdd
-    #@app.route('/health')
-    #def health():
-    #    try:
-    #        db.session.execute(db.text('SELECT 1'))
-    #        return {'status': 'ok', 'database': 'connected'}, 200
-    #    except Exception as e:
-    #        return {'status': 'error', 'database': str(e)}, 500
+    @app.route('/health')
+    def health():
+        try:
+            db.session.execute(db.text('SELECT 1'))
+            return {'status': 'ok', 'database': 'connected'}, 200
+        except Exception as e:
+            return {'status': 'error', 'database': str(e)}, 500
+
     return app
 
 
