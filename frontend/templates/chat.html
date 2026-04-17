@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Chat{% endblock %}
+{% block content %}
+<div class="chat-app" id="app">
+
+    <!--barre des serveurs sur la gauche-->
+    <div class="server-list" id="server-list">
+        <div class="server-icon home-icon active" data-id="home" title="Accueil / Messages privés">🐉</div>
+        <div class="server-divider"></div>
+        <!-- Les serveurs sont insérés dynamiquement ici -->
+        <div class="server-icon add-server" id="btn-add-server" title="Créer un serveur">+</div>
+        <div class="server-icon join-server" id="btn-join-server" title="Rejoindre un serveur">📩</div>
+    </div>
+
+    <!--salons au sein du serveur selectionné-->
+    <div class="channel-sidebar">
+        <div class="channel-header">
+            <span id="sidebar-title">Messages privés</span>
+        </div>
+        <div class="channel-list" id="channel-list">
+            <!-- Contenu dynamique -->
+        </div>
+        <div class="user-bar">
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">?</div>
+                <span class="username" id="username-display">...</span>
+            </div>
+            <button class="logout-btn" id="btn-logout" title="Se déconnecter">⏻</button>
+        </div>
+    </div>
+
+    <!--zone principale-->
+    <div class="chat-main">
+        <div class="chat-header" id="chat-header">
+            <span class="chat-header-icon" id="chat-header-icon"></span>
+            <span class="chat-header-name" id="chat-header-name">Bienvenue</span>
+            <div class="chat-header-actions">
+                <button class="header-btn" id="btn-pinned" title="Messages épinglés" style="display:none">📌</button>
+                <button class="header-btn" id="btn-members" title="Membres" style="display:none">👥</button>
+                <input type="text" class="search-input" id="search-input" placeholder="Rechercher..." style="display:none" />
+            </div>
+        </div>
+
+        <!-- Zone messages -->
+        <div class="message-area" id="message-area">
+            <div class="welcome-screen">
+                <div class="welcome-logo">🐉</div>
+                <h2>Bienvenue sur Wyvern</h2>
+                <p>Créez ou rejoignez un serveur pour commencer à discuter.</p>
+            </div>
+        </div>
+
+        <!--"x en train d'écrire"-->
+        <div class="typing-indicator" id="typing-indicator" style="display: none;">
+            <span id="typing-user"></span> est en train d'écrire...
+        </div>
+
+        <!--input pour message-->
+        <div class="message-input-container" id="message-input-container" style="display: none;">
+            <div class="message-input-wrapper">
+                <input type="text" id="message-input" placeholder="Envoyer un message..." autocomplete="off" />
+                <button id="btn-send" title="Envoyer">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!--slide-in pour voir membres du serveur sélectionné-->
+    <div class="members-panel" id="members-panel" style="display: none;">
+        <div class="panel-header">
+            <h3>Membres</h3>
+            <button class="close-panel" id="btn-close-members">✕</button>
+        </div>
+        <div class="members-list" id="members-list"></div>
+    </div>
+
+    <div class="pinned-panel" id="pinned-panel" style="display: none;">
+        <div class="panel-header">
+            <h3>Messages épinglés</h3>
+            <button class="close-panel" id="btn-close-pinned">✕</button>
+        </div>
+        <div class="pinned-list" id="pinned-list"></div>
+    </div>
+</div>
+
+<!--VV modals VV-->
+
+<!-- Créer un serveur -->
+<div class="modal-overlay" id="modal-create-server">
+    <div class="modal">
+        <h2>Créer un serveur</h2>
+        <div class="form-group">
+            <label>Nom du serveur</label>
+            <input type="text" id="input-server-name" placeholder="Mon super serveur" maxlength="100" />
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="btn-confirm-create-server">Créer</button>
+        </div>
+        <div class="modal-error" id="error-create-server"></div>
+    </div>
+</div>
+
+<!-- Rejoindre un serveur -->
+<div class="modal-overlay" id="modal-join-server">
+    <div class="modal">
+        <h2>Rejoindre un serveur</h2>
+        <div class="form-group">
+            <label>Code d'invitation</label>
+            <input type="text" id="input-invite-code" placeholder="Ex: ABC12345" maxlength="10" />
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="btn-confirm-join-server">Rejoindre</button>
+        </div>
+        <div class="modal-error" id="error-join-server"></div>
+    </div>
+</div>
+
+<!-- Créer un salon -->
+<div class="modal-overlay" id="modal-create-channel">
+    <div class="modal">
+        <h2>Créer un salon</h2>
+        <div class="form-group">
+            <label>Nom du salon</label>
+            <input type="text" id="input-channel-name" placeholder="nouveau-salon" maxlength="70" />
+        </div>
+        <div class="form-group">
+            <label>Type</label>
+            <select id="input-channel-type">
+                <option value="publique">Publique</option>
+                <option value="prive">Privé</option>
+            </select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="btn-confirm-create-channel">Créer</button>
+        </div>
+        <div class="modal-error" id="error-create-channel"></div>
+    </div>
+</div>
+
+<!-- Infos serveur (avec code d'invitation) -->
+<div class="modal-overlay" id="modal-server-info">
+    <div class="modal">
+        <h2 id="info-server-name"></h2>
+        <div class="info-row">
+            <span class="info-label">Code d'invitation :</span>
+            <code class="info-value" id="info-invite-code"></code>
+            <button class="btn-copy" id="btn-copy-invite" title="Copier">📋</button>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Votre rôle :</span>
+            <span class="info-value" id="info-role"></span>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Fermer</button>
+            <button class="btn btn-danger" id="btn-delete-server" style="display:none">Supprimer le serveur</button>
+        </div>
+    </div>
+</div>
+
+<!-- Socket.IO client (via CDN) -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="{{ url_for('static', filename='js/socket.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

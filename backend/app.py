@@ -1,4 +1,4 @@
-from flask import Flask, session, redirect
+from flask import Flask, session, redirect, render_template
 from flask_cors import CORS
 from config import Config
 from extensions import db, socketio
@@ -45,7 +45,7 @@ def create_app():
     def chat():
         if 'user_id' not in session:
             return redirect('/login')
-        return f'<h1>Bienvenue {session["pseudo"]} !</h1><p>Le chat arrive bientôt...</p>'
+        return render_template('chat.html')
 
     @app.route('/health')
     def health():
