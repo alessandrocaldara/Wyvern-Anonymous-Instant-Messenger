@@ -16,6 +16,17 @@ def get_messages(channel_id):
     if not is_member(session['user_id'], channel.serveur_id):
         return jsonify({'error': 'Accès refusé'}), 403
 
+    #vérifier l'accès aux salons privés
+    perm = Permission.query.filter_by(
+        utilisateur_id=session['user_id'],
+        serveur_id=channel.serveur_id
+    ).first()
+    if channel.type == 'prive' and perm and perm.role != 'admin':
+        from models import Server
+        server = Server.query.get(channel.serveur_id)
+        if not server or server.proprietaire_id != session['user_id']:
+            return jsonify({'error': 'Accès refusé au salon privé'}), 403
+
     limit = request.args.get('limit', 50, type=int)
     offset = request.args.get('offset', 0, type=int)
 

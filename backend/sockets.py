@@ -1,7 +1,7 @@
 from flask import session
 from flask_socketio import emit, join_room, leave_room
 from extensions import socketio, db
-from models import Message, Permission, Channel
+from models import Message, Permission, Channel, Server
 
 
 @socketio.on('connect')
@@ -36,6 +36,18 @@ def handle_join_channel(data):
     if not perm:
         emit('error', {'message': 'Accès refusé au salon'})
         return
+
+    room = f'channel_{channel_id}'
+    join_room(room)
+    emit('joined_channel', {'channel_id': channel_id})
+    
+    # Vérifier l'accès aux salons privés (admins uniquement)
+    if channel.type == 'prive' and perm.role != 'admin':
+        server = Server.query.get(channel.serveur_id)
+        is_owner = server and server.proprietaire_id == session['user_id']
+        if not is_owner:
+            emit('error', {'message': 'Ce salon est réservé aux admins'})
+            return
 
     room = f'channel_{channel_id}'
     join_room(room)

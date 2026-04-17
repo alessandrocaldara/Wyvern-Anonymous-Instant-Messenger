@@ -186,6 +186,8 @@ const WyvernApp = {
         }
 
         channels.forEach(c => {
+            //cacher les salons privés aux non-admins
+            if (c.type === 'prive' && server.role === 'membre') return;
             const item = document.createElement('div');
             item.className = 'channel-item';
             item.dataset.id = c.id;
