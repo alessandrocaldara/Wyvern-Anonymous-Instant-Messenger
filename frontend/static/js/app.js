@@ -6,14 +6,20 @@ const WyvernApp = {
     //Etat
     userId: null,
     userPseudo: '',
+    userEmail: null,
+    userCode: '',
+    userPhoto: null,
     servers: [],
     currentServerId: null,
     currentChannelId: null,
     currentChannelName: '',
     currentChannelType: 'publique',
     currentDmUserId: null,
+    currentDmPseudo: '',
     currentView: 'home',   // 'home' | 'channel' | 'dm'
     typingTimeout: null,
+    userSearchTimeout: null,
+    knownUsers: new Map(),  // id -> {pseudo, photo_profil}
 
     //init
     async init() {
@@ -25,12 +31,11 @@ const WyvernApp = {
         }
         this.userId = me.user_id;
         this.userPseudo = me.pseudo;
+        this.userEmail = me.email;
+        this.userCode = me.code_16_chiffres;
+        this.userPhoto = me.photo_profil;
 
-        //afficher le pseudo dans la barre utilisateur
-        document.getElementById('username-display').textContent = me.pseudo;
-        const avatar = document.getElementById('user-avatar');
-        avatar.textContent = me.pseudo.charAt(0).toUpperCase();
-        avatar.style.background = this.pseudoColor(me.pseudo);
+        this.updateUserBarDisplay();
 
         //connection websocket
         WyvernSocket.connect();
@@ -42,6 +47,12 @@ const WyvernApp = {
         this.selectHome();
     },
 
+    updateUserBarDisplay() {
+        document.getElementById('username-display').textContent = this.userPseudo;
+        const avatar = document.getElementById('user-avatar');
+        avatar.textContent = this.userPseudo.charAt(0).toUpperCase();
+        avatar.style.background = this.pseudoColor(this.userPseudo);
+    },
     //helper pour l'api
     async api(url, method = 'GET', body = null) {
         const opts = {
@@ -101,6 +112,7 @@ const WyvernApp = {
         //titre sidebar
         const server = this.servers.find(s => s.id === serverId);
         document.getElementById('sidebar-title').textContent = server ? server.nom : '...';
+        document.getElementById('btn-new-dm').style.display = 'none';
         //fermer les panels
         this.closePanels();
         //chargement des salons
@@ -116,6 +128,7 @@ const WyvernApp = {
         document.querySelectorAll('.server-icon').forEach(el => el.classList.remove('active'));
         document.querySelector('.home-icon').classList.add('active');
         document.getElementById('sidebar-title').textContent = 'Messages privés';
+        document.getElementById('btn-new-dm').style.display = 'inline-block';
         document.getElementById('message-input-container').style.display = 'none';
 
         this.closePanels();
@@ -186,8 +199,6 @@ const WyvernApp = {
         }
 
         channels.forEach(c => {
-            //cacher les salons privés aux non-admins
-            if (c.type === 'prive' && server.role === 'membre') return;
             const item = document.createElement('div');
             item.className = 'channel-item';
             item.dataset.id = c.id;
@@ -381,7 +392,7 @@ const WyvernApp = {
 
     async loadDMList() {
         const list = document.getElementById('channel-list');
-        list.innerHTML = '<p class="dm-hint">Chargement des utilisateurs…</p>';
+        list.innerHTML = '<p class="dm-hint">Chargement…</p>';
 
         // Charger les utilisateurs avec qui on a des DMs (tous membres de tous les serveurs)
         const allMembers = new Map();
@@ -396,13 +407,19 @@ const WyvernApp = {
             }
         }
 
+        list.innerHTML = '';
         if (allMembers.size === 0) {
-            list.innerHTML = '<p class="dm-hint">Rejoignez un serveur pour voir d\'autres utilisateurs.</p>';
+            list.innerHTML = '<p class="dm-hint">Cliquez sur ✉️ pour chercher un utilisateur.</p>';
             return;
         }
 
-        list.innerHTML = '<div class="channel-section-title">Utilisateurs</div>';
+        const title = document.createElement('div');
+        title.className = 'channel-section-title';
+        title.textContent = 'Utilisateurs';
+        list.appendChild(title);
+
         allMembers.forEach((m) => {
+            this.knownUsers.set(m.user_id, { pseudo: m.pseudo, photo_profil: m.photo_profil });
             const item = document.createElement('div');
             item.className = 'channel-item dm-item';
             item.dataset.userId = m.user_id;
@@ -415,6 +432,7 @@ const WyvernApp = {
     async selectDM(otherUserId, otherPseudo) {
         this.currentView = 'dm';
         this.currentDmUserId = otherUserId;
+        this.currentDmPseudo = otherPseudo;
         this.currentChannelId = null;
 
         WyvernSocket.leaveCurrentChannel();
@@ -433,7 +451,45 @@ const WyvernApp = {
         await this.loadDMMessages(otherUserId);
     },
 
-// VV Envoi messages VV
+    /**recherche d'utilisateurs dans le modal "Nouvelle conversation". */
+    async searchUsers(query) {
+        const resultsEl = document.getElementById('user-search-results');
+        if (!query || query.length < 2) {
+            resultsEl.innerHTML = '<p class="search-hint">Tapez au moins 2 caractères pour chercher.</p>';
+            return;
+        }
+
+        resultsEl.innerHTML = '<p class="search-hint">Recherche…</p>';
+        const result = await this.api(`/api/users/search?q=${encodeURIComponent(query)}`);
+        const users = Array.isArray(result) ? result : [];
+
+        if (users.length === 0) {
+            resultsEl.innerHTML = '<p class="search-hint">Aucun utilisateur trouvé.</p>';
+            return;
+        }
+
+        resultsEl.innerHTML = '';
+        users.forEach(u => {
+            const item = document.createElement('div');
+            item.className = 'search-result-item';
+            item.innerHTML = `
+                <div class="dm-avatar" style="background:${this.pseudoColor(u.pseudo)}">${u.pseudo.charAt(0).toUpperCase()}</div>
+                <span class="result-pseudo">${this.escapeHtml(u.pseudo)}</span>
+                <button class="btn btn-primary btn-small">Discuter</button>
+            `;
+            item.querySelector('button').addEventListener('click', () => {
+                this.knownUsers.set(u.id, { pseudo: u.pseudo, photo_profil: u.photo_profil });
+                this.closeModals();
+                // Basculer en mode home et ouvrir la DM
+                this.selectHome();
+                // Ajouter l'utilisateur à la liste si absent
+                setTimeout(() => this.selectDM(u.id, u.pseudo), 200);
+            });
+            resultsEl.appendChild(item);
+        });
+    },
+
+    // VV Envoi messages VV
     sendCurrentMessage() {
         const input = document.getElementById('message-input');
         const text = input.value.trim();
@@ -548,7 +604,93 @@ const WyvernApp = {
         }, 3000);
     },
 
-//aides UI
+    //param. profil
+    openSettings() {
+        //remplir le modal avec les valeurs actuelles
+        document.getElementById('settings-code').textContent = this.userCode || '';
+        document.getElementById('settings-pseudo').value = this.userPseudo;
+        document.getElementById('settings-email').value = this.userEmail || '';
+        document.getElementById('settings-photo').value = this.userPhoto || '';
+        document.getElementById('settings-current-password').value = '';
+        document.getElementById('settings-new-password').value = '';
+        document.getElementById('error-settings').textContent = '';
+        document.getElementById('success-settings').textContent = '';
+        this.openModal('modal-settings');
+    },
+
+    async saveSettings() {
+        const errorEl = document.getElementById('error-settings');
+        const successEl = document.getElementById('success-settings');
+        errorEl.textContent = '';
+        successEl.textContent = '';
+
+        const body = {};
+
+        // Pseudo
+        const newPseudo = document.getElementById('settings-pseudo').value.trim();
+        if (newPseudo !== this.userPseudo) {
+            body.pseudo = newPseudo;
+        }
+
+        // Email
+        const newEmail = document.getElementById('settings-email').value.trim();
+        if (newEmail !== (this.userEmail || '')) {
+            body.email = newEmail;
+        }
+
+        // Photo
+        const newPhoto = document.getElementById('settings-photo').value.trim();
+        if (newPhoto !== (this.userPhoto || '')) {
+            body.photo_profil = newPhoto;
+        }
+
+        // Mot de passe
+        const newPassword = document.getElementById('settings-new-password').value;
+        const currentPassword = document.getElementById('settings-current-password').value;
+        if (newPassword) {
+            if (!currentPassword) {
+                errorEl.textContent = 'Mot de passe actuel requis pour changer le mot de passe.';
+                return;
+            }
+            body.new_password = newPassword;
+            body.current_password = currentPassword;
+        }
+
+        if (Object.keys(body).length === 0) {
+            errorEl.textContent = 'Aucune modification à enregistrer.';
+            return;
+        }
+
+        const btn = document.getElementById('btn-save-settings');
+        btn.disabled = true;
+        btn.textContent = 'Enregistrement...';
+
+        const res = await this.api('/api/users/me', 'PUT', body);
+
+        btn.disabled = false;
+        btn.textContent = 'Enregistrer';
+
+        if (res.error) {
+            errorEl.textContent = res.error;
+            return;
+        }
+
+        // Mettre à jour l'état local
+        this.userPseudo = res.pseudo;
+        this.userEmail = res.email;
+        this.userPhoto = res.photo_profil;
+        this.updateUserBarDisplay();
+
+        successEl.textContent = 'Profil mis à jour avec succès !';
+
+        // Vider les champs mot de passe
+        document.getElementById('settings-current-password').value = '';
+        document.getElementById('settings-new-password').value = '';
+
+        // Fermer automatiquement après 1.5s
+        setTimeout(() => this.closeModals(), 1500);
+    },
+    //aides UI
     showHeaderActions(isChannel) {
         document.getElementById('btn-pinned').style.display = isChannel ? 'inline-block' : 'none';
         document.getElementById('btn-members').style.display = this.currentServerId ? 'inline-block' : 'none';
@@ -634,6 +776,25 @@ const WyvernApp = {
         });
 
         //fermer les modals (bouton Annuler/click sur overlay)
+        //param. profil
+        document.getElementById('user-info-clickable').addEventListener('click', () => this.openSettings());
+        document.getElementById('btn-save-settings').addEventListener('click', () => this.saveSettings());
+        document.getElementById('btn-copy-code').addEventListener('click', () => {
+            navigator.clipboard.writeText(this.userCode);
+            const btn = document.getElementById('btn-copy-code');
+            btn.textContent = '✅';
+            setTimeout(() => { btn.textContent = '📋'; }, 1500);
+        });
+
+        //nouvelle conversation (recherche utilisateur)
+        document.getElementById('btn-new-dm').addEventListener('click', () => this.openModal('modal-new-dm'));
+        document.getElementById('input-search-user').addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            clearTimeout(this.userSearchTimeout);
+            this.userSearchTimeout = setTimeout(() => this.searchUsers(query), 250);
+        });
+
+        //fermer les modals (bouton Annuler / clic sur overlay)
         document.querySelectorAll('.modal-cancel').forEach(btn => {
             btn.addEventListener('click', () => this.closeModals());
         });
@@ -660,11 +821,21 @@ const WyvernApp = {
 
 //VV Utils VV
     openModal(id) {
-        document.getElementById(id).classList.add('active');
-        document.getElementById(id).querySelectorAll('input').forEach(i => i.value = '');
-        document.getElementById(id).querySelectorAll('.modal-error').forEach(e => e.textContent = '');
-        const firstInput = document.getElementById(id).querySelector('input');
+        const modal = document.getElementById(id);
+        modal.classList.add('active');
+
+        //ne pas vider les inputs du modal settings ou new-dm (ils sont remplis par openSettings / searchUsers)
+        if (id !== 'modal-settings' && id !== 'modal-new-dm') {
+            modal.querySelectorAll('input').forEach(i => i.value = '');
+        }
+        modal.querySelectorAll('.modal-error, .modal-success').forEach(e => e.textContent = '');
+
+        const firstInput = modal.querySelector('input:not([type="password"])') || modal.querySelector('input');
         if (firstInput) setTimeout(() => firstInput.focus(), 100);
+
+        if (id === 'modal-new-dm') {
+            document.getElementById('user-search-results').innerHTML = '<p class="search-hint">Tapez au moins 2 caractères pour chercher.</p>';
+        }
     },
     closeModals() {
         document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('active'));
