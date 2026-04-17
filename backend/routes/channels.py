@@ -29,10 +29,19 @@ def is_member(user_id, server_id):
 @login_required
 def get_channels(server_id):
     """Liste les salons d'un serveur."""
-    if not is_member(session['user_id'], server_id):
-        return jsonify({'error': 'Accès refusé'}), 403
+    user_id = session['user_id']
 
-    channels = Channel.query.filter_by(serveur_id=server_id).all()
+    #vérifier si l'utilisateur a le droit d'être ici
+    if not is_member(user_id, server_id):
+        return jsonify({'error': 'Accès refusé'}), 403
+    #filtrer les salons selon le rôle de l'utilisateur
+    if is_admin(user_id, server_id):
+        #les admins voient TOUT
+        channels = Channel.query.filter_by(serveur_id=server_id).all()
+    else:
+        #les membres normaux ne voient QUE les salons publics
+        channels = Channel.query.filter_by(serveur_id=server_id, type='publique').all()
+    #renvoyer les données filtrées au frontend
     return jsonify([{
         'id': c.id,
         'nom': c.nom,
