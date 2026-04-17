@@ -16,12 +16,13 @@
     <div class="channel-sidebar">
         <div class="channel-header">
             <span id="sidebar-title">Messages privés</span>
+            <button class="sidebar-btn" id="btn-new-dm" title="Nouvelle conversation" style="display:none">✉️</button>
         </div>
         <div class="channel-list" id="channel-list">
             <!-- Contenu dynamique -->
         </div>
         <div class="user-bar">
-            <div class="user-info">
+            <div class="user-info" id="user-info-clickable" title="Paramètres du profil">
                 <div class="user-avatar" id="user-avatar">?</div>
                 <span class="username" id="username-display">...</span>
             </div>
@@ -155,6 +156,73 @@
         <div class="modal-actions">
             <button class="btn btn-secondary modal-cancel">Fermer</button>
             <button class="btn btn-danger" id="btn-delete-server" style="display:none">Supprimer le serveur</button>
+        </div>
+    </div>
+</div>
+
+<!-- Paramètres du profil -->
+<div class="modal-overlay" id="modal-settings">
+    <div class="modal modal-large">
+        <h2>Paramètres du profil</h2>
+
+        <div class="settings-section">
+            <h3>Identité</h3>
+            <div class="info-row">
+                <span class="info-label">Code de connexion :</span>
+                <code class="info-value" id="settings-code"></code>
+                <button class="btn-copy" id="btn-copy-code" title="Copier">📋</button>
+            </div>
+            <p class="settings-hint">Ce code de 16 chiffres permet de vous connecter de manière anonyme.</p>
+        </div>
+
+        <div class="settings-section">
+            <h3>Modifier les informations</h3>
+            <div class="form-group">
+                <label>Pseudo</label>
+                <input type="text" id="settings-pseudo" maxlength="50" />
+            </div>
+            <div class="form-group">
+                <label>Email <span class="optional">(facultatif)</span></label>
+                <input type="email" id="settings-email" placeholder="vide pour retirer" maxlength="100" />
+            </div>
+            <div class="form-group">
+                <label>Photo de profil <span class="optional">(URL, facultatif)</span></label>
+                <input type="text" id="settings-photo" placeholder="https://..." maxlength="255" />
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h3>Changer le mot de passe</h3>
+            <div class="form-group">
+                <label>Mot de passe actuel</label>
+                <input type="password" id="settings-current-password" placeholder="Requis pour le changement" autocomplete="current-password" />
+            </div>
+            <div class="form-group">
+                <label>Nouveau mot de passe <span class="optional">(min. 6 caractères)</span></label>
+                <input type="password" id="settings-new-password" placeholder="Laisser vide pour ne pas changer" autocomplete="new-password" />
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="btn-save-settings">Enregistrer</button>
+        </div>
+        <div class="modal-error" id="error-settings"></div>
+        <div class="modal-success" id="success-settings"></div>
+    </div>
+</div>
+
+<!-- Démarrer une nouvelle conversation (recherche d'utilisateur) -->
+<div class="modal-overlay" id="modal-new-dm">
+    <div class="modal">
+        <h2>Nouvelle conversation privée</h2>
+        <div class="form-group">
+            <label>Rechercher un utilisateur par pseudo</label>
+            <input type="text" id="input-search-user" placeholder="Tapez au moins 2 caractères..." autocomplete="off" />
+        </div>
+        <div class="user-search-results" id="user-search-results"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Fermer</button>
         </div>
     </div>
 </div>
