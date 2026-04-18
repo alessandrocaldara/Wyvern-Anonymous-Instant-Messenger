@@ -26,11 +26,13 @@ def create_app():
     from routes.servers import servers_bp
     from routes.channels import channels_bp
     from routes.messages import messages_bp
+    from routes.polls import polls_bp
     from routes.users import users_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(servers_bp)
     app.register_blueprint(channels_bp)
     app.register_blueprint(messages_bp)
+    app.register_blueprint(polls_bp)
     app.register_blueprint(users_bp)
 
     # Importer les événements WebSocket (enregistrement par décorateurs)

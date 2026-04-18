@@ -198,7 +198,12 @@ const WyvernApp = {
             list.appendChild(addBtn);
         }
 
+        const isAdmin = server && (server.role === 'admin' || server.is_owner);
+
         channels.forEach(c => {
+            // Masquer les salons privés aux utilisateurs normaux
+            if (c.type === 'prive' && !isAdmin) return;
+
             const item = document.createElement('div');
             item.className = 'channel-item';
             item.dataset.id = c.id;
@@ -252,7 +257,20 @@ const WyvernApp = {
         if (messages.length === 0) {
             area.innerHTML = '<div class="empty-channel"><p>Aucun message. Lancez la conversation !</p></div>';
         } else {
-            messages.forEach(m => this.appendMessage(m, false));
+            for (const m of messages) {
+                if (m.contenu_chiffre && m.contenu_chiffre.startsWith('[SONDAGE]')) {
+                    // Récupérer les données complètes du sondage depuis l'API
+                    const pollData = await this.api(`/api/messages/${m.id}/poll`);
+                    if (pollData && !pollData.error) {
+                        this.appendPoll(pollData, false);
+                    } else {
+                        // Fallback : afficher comme message normal si le poll est introuvable
+                        this.appendMessage(m, false);
+                    }
+                } else {
+                    this.appendMessage(m, false);
+                }
+            }
         }
         this.scrollToBottom();
     },
@@ -775,6 +793,40 @@ const WyvernApp = {
             window.location.href = '/login';
         });
 
+        // bouton sondage
+        document.getElementById('btn-poll').addEventListener('click', () => {
+            if (!this.currentChannelId) return;
+            document.getElementById('poll-question').value = '';
+            document.getElementById('error-create-poll').textContent = '';
+            const container = document.getElementById('poll-options-container');
+            container.innerHTML = `
+                <div class="form-group"><label>Option 1</label><input type="text" class="poll-option-input" placeholder="Option 1" maxlength="100"/></div>
+                <div class="form-group"><label>Option 2</label><input type="text" class="poll-option-input" placeholder="Option 2" maxlength="100"/></div>`;
+            this.openModal('modal-create-poll');
+        });
+
+        document.getElementById('btn-add-poll-option').addEventListener('click', () => {
+            const container = document.getElementById('poll-options-container');
+            const count = container.querySelectorAll('.poll-option-input').length + 1;
+            if (count > 5) return;
+            const div = document.createElement('div');
+            div.className = 'form-group';
+            div.innerHTML = `<label>Option ${count}</label><input type="text" class="poll-option-input" placeholder="Option ${count}" maxlength="100"/>`;
+            container.appendChild(div);
+        });
+
+        document.getElementById('btn-confirm-create-poll').addEventListener('click', async () => {
+            const question = document.getElementById('poll-question').value.trim();
+            const options = Array.from(document.querySelectorAll('.poll-option-input'))
+                .map(i => i.value.trim()).filter(Boolean);
+            if (!question) { document.getElementById('error-create-poll').textContent = 'Question requise'; return; }
+            if (options.length < 2) { document.getElementById('error-create-poll').textContent = 'Au moins 2 options requises'; return; }
+            const res = await this.api(`/api/channels/${this.currentChannelId}/polls`, 'POST', { question, options });
+            if (res.error) { document.getElementById('error-create-poll').textContent = res.error; return; }
+            this.closeModals();
+            // le sondage apparaît via WebSocket new_poll
+        });
+
         //fermer les modals (bouton Annuler/click sur overlay)
         //param. profil
         document.getElementById('user-info-clickable').addEventListener('click', () => this.openSettings());
@@ -879,7 +931,97 @@ const WyvernApp = {
             hash = pseudo.charCodeAt(i) + ((hash << 5) - hash);
         }
         return colors[Math.abs(hash) % colors.length];
-    }
+    },
+
+//  SONDAGES
+    buildPollHTML(poll) {
+        const optionsHTML = poll.options.map(opt => {
+            const voted = opt.id === poll.user_vote;
+            return `
+            <div>
+                <button class="poll-option-btn ${voted ? 'voted' : ''}" data-option-id="${opt.id}">
+                    <span>${this.escapeHtml(opt.texte)}</span>
+                    <span class="poll-option-count">${opt.votes} vote${opt.votes !== 1 ? 's' : ''} (${opt.percent}%)</span>
+                </button>
+                <div class="poll-progress-bar">
+                    <div class="poll-progress-fill" style="width:${opt.percent}%"></div>
+                </div>
+            </div>`;
+        }).join('');
+
+        const unvoteLink = poll.user_vote
+            ? ` · <a href="#" class="poll-unvote" data-poll-id="${poll.id}">Retirer mon vote</a>`
+            : '';
+
+        return `
+        <div class="poll-card" data-poll-id="${poll.id}">
+            <div class="poll-question">📊 ${this.escapeHtml(poll.question)}</div>
+            <div class="poll-options">${optionsHTML}</div>
+            <div class="poll-footer">${poll.total_votes} vote${poll.total_votes !== 1 ? 's' : ''} au total${unvoteLink}</div>
+        </div>`;
+    },
+
+    attachPollEvents(container, pollId) {
+        container.querySelectorAll('.poll-option-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.votePoll(pollId, parseInt(btn.dataset.optionId)));
+        });
+        const unvote = container.querySelector('.poll-unvote');
+        if (unvote) {
+            unvote.addEventListener('click', async (e) => {
+                e.preventDefault();
+                await this.unvotePoll(pollId);
+            });
+        }
+    },
+
+    async votePoll(pollId, optionId) {
+        const res = await this.api(`/api/polls/${pollId}/vote`, 'POST', { option_id: optionId });
+        if (res.error) { alert('Erreur : ' + res.error); return; }
+        this.refreshPollInDOM(res);
+    },
+
+    async unvotePoll(pollId) {
+        const res = await this.api(`/api/polls/${pollId}/vote`, 'DELETE');
+        if (res.error) { alert('Erreur : ' + res.error); return; }
+        this.refreshPollInDOM(res);
+    },
+
+    refreshPollInDOM(pollData) {
+        const area = document.getElementById('message-area');
+        const card = area.querySelector(`.poll-card[data-poll-id="${pollData.id}"]`);
+        if (card) {
+            card.outerHTML = this.buildPollHTML(pollData);
+            // re-sélectionner après remplacement
+            const newCard = area.querySelector(`.poll-card[data-poll-id="${pollData.id}"]`);
+            if (newCard) this.attachPollEvents(newCard.parentElement, pollData.id);
+        }
+    },
+
+    appendPoll(pollData, scroll = true) {
+        const area = document.getElementById('message-area');
+        const welcome = area.querySelector('.welcome-screen, .empty-channel');
+        if (welcome) welcome.remove();
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message';
+        const initiale = (pollData.auteur_pseudo || '?').charAt(0).toUpperCase();
+        const time = this.formatTime(pollData.horodatage);
+
+        wrapper.innerHTML = `
+            <div class="message-avatar" style="background:${this.pseudoColor(pollData.auteur_pseudo)}">${this.escapeHtml(initiale)}</div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-author" style="color:${this.pseudoColor(pollData.auteur_pseudo)}">${this.escapeHtml(pollData.auteur_pseudo)}</span>
+                    <span class="message-time">${time}</span>
+                </div>
+                ${this.buildPollHTML(pollData)}
+            </div>`;
+
+        this.attachPollEvents(wrapper, pollData.id);
+        area.appendChild(wrapper);
+        if (scroll) this.scrollToBottom();
+    },
+
 };
 //lancer l'application
 document.addEventListener('DOMContentLoaded', () => WyvernApp.init());

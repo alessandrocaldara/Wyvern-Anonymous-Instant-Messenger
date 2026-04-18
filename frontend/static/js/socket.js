@@ -44,6 +44,18 @@ const WyvernSocket = {
         this.socket.on('joined_channel', (data) => {
             console.log('[WS] Rejoint le salon', data.channel_id);
         });
+
+        // nouveau sondage
+        this.socket.on('new_poll', (pollData) => {
+            if (WyvernApp.currentView === 'channel' && pollData.channel_id === this.currentChannelId) {
+                WyvernApp.appendPoll(pollData);
+            }
+        });
+
+        // mise à jour d'un sondage (vote/dévote)
+        this.socket.on('poll_updated', (pollData) => {
+            WyvernApp.refreshPollInDOM(pollData);
+        });
     },
     /**rejoindre salon confirmation*/
     joinChannel(channelId) {

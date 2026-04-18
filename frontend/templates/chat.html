@@ -59,6 +59,7 @@
         <!--input pour message-->
         <div class="message-input-container" id="message-input-container" style="display: none;">
             <div class="message-input-wrapper">
+                <button id="btn-poll" class="input-action-btn" title="Créer un sondage">📊</button>
                 <input type="text" id="message-input" placeholder="Envoyer un message..." autocomplete="off" />
                 <button id="btn-send" title="Envoyer">➤</button>
             </div>
@@ -224,6 +225,34 @@
         <div class="modal-actions">
             <button class="btn btn-secondary modal-cancel">Fermer</button>
         </div>
+    </div>
+</div>
+
+
+<!-- Modal créer un sondage -->
+<div class="modal-overlay" id="modal-create-poll">
+    <div class="modal">
+        <h2>📊 Créer un sondage</h2>
+        <div class="form-group">
+            <label>Question</label>
+            <input type="text" id="poll-question" placeholder="Votre question..." maxlength="200" />
+        </div>
+        <div id="poll-options-container">
+            <div class="form-group">
+                <label>Option 1</label>
+                <input type="text" class="poll-option-input" placeholder="Option 1" maxlength="100" />
+            </div>
+            <div class="form-group">
+                <label>Option 2</label>
+                <input type="text" class="poll-option-input" placeholder="Option 2" maxlength="100" />
+            </div>
+        </div>
+        <button class="btn btn-secondary" id="btn-add-poll-option" style="margin-top:6px;font-size:0.85rem;padding:6px 12px;">+ Ajouter une option</button>
+        <div class="modal-actions">
+            <button class="btn btn-secondary modal-cancel">Annuler</button>
+            <button class="btn btn-primary" id="btn-confirm-create-poll">Créer</button>
+        </div>
+        <div class="modal-error" id="error-create-poll"></div>
     </div>
 </div>
 
