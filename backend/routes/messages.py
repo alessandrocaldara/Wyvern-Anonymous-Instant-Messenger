@@ -1,12 +1,48 @@
 from flask import Blueprint, request, jsonify, session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, case
 from extensions import db
-from models import Message, Channel, Permission
+from models import Message, Channel, Permission, User
 from routes.auth import login_required
 from routes.channels import is_admin, is_member
 
 messages_bp = Blueprint('messages', __name__)
 
+@messages_bp.route('/api/dms', methods=['GET'])
+@login_required
+def get_dm_list():
+    """Liste des conversations DM triées par activité récente."""
+    uid = session['user_id']
+
+    other_user_id = case(
+        (Message.auteur_id == uid, Message.destinataire_id),
+        else_=Message.auteur_id
+    )
+
+    latest_rows = db.session.query(
+        other_user_id.label('other_user_id'),
+        db.func.max(Message.horodatage).label('last_message_at')
+    ).filter(
+        Message.salon_id.is_(None),
+        or_(Message.auteur_id == uid, Message.destinataire_id == uid)
+    ).group_by(other_user_id).order_by(db.text('last_message_at DESC')).all()
+
+    conversations = []
+    for row in latest_rows:
+        if row.other_user_id is None:
+            continue
+
+        user = db.session.get(User, row.other_user_id)
+        if not user:
+            continue
+
+        conversations.append({
+            'user_id': user.id,
+            'pseudo': user.pseudo,
+            'photo_profil': user.photo_profil,
+            'last_message_at': row.last_message_at.isoformat() if row.last_message_at else None
+        })
+
+    return jsonify(conversations), 200
 
 @messages_bp.route('/api/channels/<int:channel_id>/messages', methods=['GET'])
 @login_required

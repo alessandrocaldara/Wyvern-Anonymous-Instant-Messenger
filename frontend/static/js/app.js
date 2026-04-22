@@ -20,6 +20,7 @@ const WyvernApp = {
     typingTimeout: null,
     userSearchTimeout: null,
     knownUsers: new Map(),  // id -> {pseudo, photo_profil}
+    dmConversations: new Map(), // id -> {user_id, pseudo, photo_profil, last_message_at}
 
     //init
     async init() {
@@ -409,41 +410,43 @@ const WyvernApp = {
     // ══════════════════════════════════════════
 
     async loadDMList() {
-        const list = document.getElementById('channel-list');
-        list.innerHTML = '<p class="dm-hint">Chargement…</p>';
+    const result = await this.api('/api/dms');
+    const conversations = Array.isArray(result) ? result : [];
+    this.dmConversations = new Map();
 
-        // Charger les utilisateurs avec qui on a des DMs (tous membres de tous les serveurs)
-        const allMembers = new Map();
-        for (const server of this.servers) {
-            const members = await this.api(`/api/servers/${server.id}/members`);
-            if (Array.isArray(members)) {
-                members.forEach(m => {
-                    if (m.user_id !== this.userId) {
-                        allMembers.set(m.user_id, m);
-                    }
-                });
-            }
-        }
+    conversations.forEach(dm => {
+        this.dmConversations.set(dm.user_id, dm);
+        this.knownUsers.set(dm.user_id, { pseudo: dm.pseudo, photo_profil: dm.photo_profil });
+    });
 
-        list.innerHTML = '';
-        if (allMembers.size === 0) {
-            list.innerHTML = '<p class="dm-hint">Cliquez sur ✉️ pour chercher un utilisateur.</p>';
-            return;
-        }
+    this.renderDMList();
+    },
 
-        const title = document.createElement('div');
-        title.className = 'channel-section-title';
-        title.textContent = 'Utilisateurs';
-        list.appendChild(title);
+    renderDMList() {
+    const list = document.getElementById('channel-list');
+    list.innerHTML = '';
 
-        allMembers.forEach((m) => {
-            this.knownUsers.set(m.user_id, { pseudo: m.pseudo, photo_profil: m.photo_profil });
-            const item = document.createElement('div');
-            item.className = 'channel-item dm-item';
-            item.dataset.userId = m.user_id;
-            item.innerHTML = `<span class="dm-avatar" style="background:${this.pseudoColor(m.pseudo)}">${m.pseudo.charAt(0).toUpperCase()}</span> ${this.escapeHtml(m.pseudo)}`;
-            item.addEventListener('click', () => this.selectDM(m.user_id, m.pseudo));
-            list.appendChild(item);
+    if (this.dmConversations.size === 0) {
+        list.innerHTML = '<p class="dm-hint">Cliquez sur ✉️ pour démarrer une conversation.</p>';
+        return;
+    }
+
+    const title = document.createElement('div');
+    title.className = 'channel-section-title';
+    title.textContent = 'Conversations';
+    list.appendChild(title);
+
+    const conversations = Array.from(this.dmConversations.values())
+        .sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
+
+    conversations.forEach((dm) => {
+        const item = document.createElement('div');
+        item.className = 'channel-item dm-item';
+        item.dataset.userId = dm.user_id;
+        item.innerHTML = `<span class="dm-avatar" style="background:${this.pseudoColor(dm.pseudo)}">${dm.pseudo.charAt(0).toUpperCase()}</span> ${this.escapeHtml(dm.pseudo)}`;
+        item.addEventListener('click', () => this.selectDM(dm.user_id, dm.pseudo));
+        if (dm.user_id === this.currentDmUserId) item.classList.add('active');
+        list.appendChild(item);
         });
     },
 
@@ -466,7 +469,40 @@ const WyvernApp = {
         document.getElementById('message-input-container').style.display = 'block';
         document.getElementById('message-input').placeholder = `Message à ${otherPseudo}`;
         document.getElementById('message-input').focus();
+        this.ensureDMConversation(otherUserId, otherPseudo);
         await this.loadDMMessages(otherUserId);
+    },
+
+    ensureDMConversation(userId, pseudo, photoProfil = null, lastMessageAt = null) {
+    if (!userId || !pseudo) return;
+
+    const existing = this.dmConversations.get(userId) || {};
+    const conversation = {
+        user_id: userId,
+        pseudo: pseudo || existing.pseudo || 'Utilisateur',
+        photo_profil: photoProfil ?? existing.photo_profil ?? null,
+        last_message_at: lastMessageAt || existing.last_message_at || new Date().toISOString()
+        };
+
+    this.dmConversations.set(userId, conversation);
+    this.knownUsers.set(userId, {
+        pseudo: conversation.pseudo,
+        photo_profil: conversation.photo_profil
+        });
+
+    if (this.currentView === 'home' || this.currentView === 'dm') {
+        this.renderDMList();
+        }
+    },
+
+    promoteDMConversation(userId, pseudo = null, photoProfil = null, lastMessageAt = null) {
+    const known = this.knownUsers.get(userId) || {};
+    this.ensureDMConversation(
+        userId,
+        pseudo || known.pseudo,
+        photoProfil ?? known.photo_profil ?? null,
+        lastMessageAt || new Date().toISOString()
+        );
     },
 
     /**recherche d'utilisateurs dans le modal "Nouvelle conversation". */
@@ -497,6 +533,7 @@ const WyvernApp = {
             `;
             item.querySelector('button').addEventListener('click', () => {
                 this.knownUsers.set(u.id, { pseudo: u.pseudo, photo_profil: u.photo_profil });
+                this.ensureDMConversation(u.id, u.pseudo, u.photo_profil);
                 this.closeModals();
                 // Basculer en mode home et ouvrir la DM
                 this.selectHome();

@@ -26,13 +26,20 @@ const WyvernSocket = {
         });
         //nouveau message prive
         this.socket.on('new_dm', (msg) => {
-            if (WyvernApp.currentView === 'dm') {
-                const otherId = msg.auteur_id === WyvernApp.userId
-                    ? msg.destinataire_id
-                    : msg.auteur_id;
-                if (otherId === WyvernApp.currentDmUserId) {
-                    WyvernApp.appendMessage(msg);
-                }
+            const otherId = msg.auteur_id === WyvernApp.userId
+                ? msg.destinataire_id
+                : msg.auteur_id;
+            const otherUser = WyvernApp.knownUsers.get(otherId) || {};
+
+            WyvernApp.promoteDMConversation(
+                otherId,
+                otherUser.pseudo || msg.auteur_pseudo,
+                otherUser.photo_profil || null,
+                msg.horodatage
+            );
+
+            if (WyvernApp.currentView === 'dm' && otherId === WyvernApp.currentDmUserId) {
+                WyvernApp.appendMessage(msg);
             }
         });
         //indicateur "X est en train d'écrire"
