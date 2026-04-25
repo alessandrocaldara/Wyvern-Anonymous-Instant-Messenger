@@ -49,6 +49,8 @@ CREATE TABLE `messages` (
   `destinataire_id` int DEFAULT NULL,
   `horodatage` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `est_epingle` tinyint(1) DEFAULT '0'
+  `iv_chiffrement` VARCHAR(24) DEFAULT NULL,
+  `cle_symetrique_chiffree` TEXT DEFAULT NULL,
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -143,6 +145,8 @@ CREATE TABLE `users` (
   `code_16_chiffres` varchar(16) NOT NULL,
   `email` varchar(100) DEFAULT NULL,
   `photo_profil` varchar(255) DEFAULT NULL,
+  `cle_publique` TEXT DEFAULT NULL,
+  `cle_privee_chiffree` TEXT DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

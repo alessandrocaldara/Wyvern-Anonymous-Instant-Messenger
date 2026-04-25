@@ -15,6 +15,8 @@ class User(db.Model):
     code_16_chiffres = db.Column(db.String(16), unique=True, nullable=False)
     email = db.Column(db.String(100), nullable=True)
     photo_profil = db.Column(db.String(255), nullable=True)
+    cle_publique = db.Column(db.Text, nullable=True)
+    cle_privee_chiffree = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
@@ -82,6 +84,8 @@ class Message(db.Model):
     )
     horodatage = db.Column(db.DateTime, default=datetime.utcnow)
     est_epingle = db.Column(db.Boolean, default=False)
+    iv_chiffrement = db.Column(db.String(24), nullable=True)
+    cle_symetrique_chiffree = db.Column(db.Text, nullable=True)
 
     # Relations
     auteur = db.relationship(
