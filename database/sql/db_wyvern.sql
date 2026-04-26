@@ -48,9 +48,9 @@ CREATE TABLE `messages` (
   `salon_id` int DEFAULT NULL,
   `destinataire_id` int DEFAULT NULL,
   `horodatage` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `est_epingle` tinyint(1) DEFAULT '0'
+  `est_epingle` tinyint(1) DEFAULT '0',
   `iv_chiffrement` VARCHAR(24) DEFAULT NULL,
-  `cle_symetrique_chiffree` TEXT DEFAULT NULL,
+  `cle_symetrique_chiffree` TEXT DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
