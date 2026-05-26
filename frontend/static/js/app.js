@@ -21,6 +21,7 @@ const WyvernApp = {
     userSearchTimeout: null,
     knownUsers: new Map(),  // id -> {pseudo, photo_profil}
     dmConversations: new Map(), // id -> {user_id, pseudo, photo_profil, last_message_at}
+    currentChannelMembersKeys: null, // [{user_id, pubkey}] pour chiffrement E2E salon
 
     //init
     async init() {
@@ -31,6 +32,12 @@ const WyvernApp = {
             return;
         }
         this.userId = me.user_id;
+        //restaurer la clé privée E2E depuis sessionStorage
+        const storedKey = sessionStorage.getItem('e2e_pk');
+        if (storedKey) {
+            window.__wyvernPrivateKey = BigInt('0x' + storedKey);
+            console.log('[E2E] Clé privée restaurée depuis sessionStorage');
+        }
         this.userPseudo = me.pseudo;
         this.userEmail = me.email;
         this.userCode = me.code_16_chiffres;
@@ -252,6 +259,23 @@ const WyvernApp = {
     async loadMessages(channelId) {
         const result = await this.api(`/api/channels/${channelId}/messages?limit=100`);
         const messages = Array.isArray(result) ? result : [];
+
+        //charger les clés des membres pour le déchiffrement E2E
+        if (window.__wyvernPrivateKey && this.currentServerId) {
+            try {
+                const keysData = await this.api(`/api/servers/${this.currentServerId}/members_keys`);
+                if (Array.isArray(keysData)) {
+                    this.currentChannelMembersKeys = keysData.map(k => ({
+                        user_id: k.user_id,
+                        pubkey: WyvernCrypto.deserializePoint(k.cle_publique)
+                    }));
+                }
+            } catch (err) {
+                console.warn('[E2E] Impossible de charger les clés membres:', err);
+                this.currentChannelMembersKeys = null;
+            }
+        }
+
         const area = document.getElementById('message-area');
         area.innerHTML = '';
 
@@ -259,7 +283,9 @@ const WyvernApp = {
             area.innerHTML = '<div class="empty-channel"><p>Aucun message. Lancez la conversation !</p></div>';
         } else {
             for (const m of messages) {
-                if (m.contenu_chiffre && m.contenu_chiffre.startsWith('[SONDAGE]')) {
+                //déchiffrer le contenu pour détecter les sondages
+                const contenuClair = this.decryptContent(m);
+                if (contenuClair && contenuClair.startsWith('[SONDAGE]')) {
                     // Récupérer les données complètes du sondage depuis l'API
                     const pollData = await this.api(`/api/messages/${m.id}/poll`);
                     if (pollData && !pollData.error) {
@@ -316,7 +342,7 @@ const WyvernApp = {
                     <span class="message-time">${time}</span>
                     ${msg.est_epingle ? '<span class="pin-badge" title="Épinglé">📌</span>' : ''}
                 </div>
-                <div class="message-text">${this.escapeHtml(msg.contenu_chiffre)}</div>
+                <div class="message-text">${this.escapeHtml(this.decryptContent(msg))}</div>
             </div>
             <div class="message-actions">
                 ${isChannel && isAdmin ? `<button class="msg-action-btn" data-action="pin" title="${msg.est_epingle ? 'Désépingler' : 'Épingler'}">📌</button>` : ''}
@@ -337,6 +363,42 @@ const WyvernApp = {
 
         area.appendChild(div);
         if (scroll) this.scrollToBottom();
+    },
+
+    /**déchiffre le contenu d'un message si E2E actif, sinon retourne le texte brut*/
+    decryptContent(msg) {
+        if (!window.__wyvernPrivateKey || !msg.iv_chiffrement || !msg.cle_symetrique_chiffree) {
+            return msg.contenu_chiffre; //pas chiffré E2E
+        }
+        try {
+            //salon : cle_symetrique_chiffree est un JSON {user_id: "C1|C2"}
+            //dm : cle_symetrique_chiffree est directement "C1|C2"
+            let keys = msg.cle_symetrique_chiffree;
+            if (typeof keys === 'string' && keys.startsWith('{')) {
+                keys = JSON.parse(keys);
+            }
+
+            if (typeof keys === 'object' && !Array.isArray(keys)) {
+                //message de salon — déchiffrer avec notre user_id
+                return WyvernCrypto.decryptChannelMessage({
+                    ciphertext: msg.contenu_chiffre,
+                    iv: msg.iv_chiffrement,
+                    encryptedKeys: keys
+                }, this.userId, window.__wyvernPrivateKey);
+            } else {
+                //message DM — cle_symetrique_chiffree = "C1hex|C2hex"
+                const parts = msg.cle_symetrique_chiffree.split('|');
+                if (parts.length === 2) {
+                    return WyvernCrypto.decryptMessage(
+                        msg.contenu_chiffre, parts[0], parts[1],
+                        msg.iv_chiffrement, window.__wyvernPrivateKey
+                    );
+                }
+            }
+        } catch (err) {
+            console.warn('[E2E] Déchiffrement échoué:', err.message);
+        }
+        return '[Message chiffré — déchiffrement impossible]';
     },
 
     async deleteMessage(msgId, element) {
@@ -545,15 +607,15 @@ const WyvernApp = {
     },
 
     // VV Envoi messages VV
-    sendCurrentMessage() {
+    async sendCurrentMessage() {
         const input = document.getElementById('message-input');
         const text = input.value.trim();
         if (!text) return;
 
         if (this.currentView === 'channel' && this.currentChannelId) {
-            WyvernSocket.sendMessage(text, this.currentChannelId);
+            await WyvernSocket.sendMessage(text, this.currentChannelId);
         } else if (this.currentView === 'dm' && this.currentDmUserId) {
-            WyvernSocket.sendDM(text, this.currentDmUserId);
+            await WyvernSocket.sendDM(text, this.currentDmUserId);
         }
         input.value = '';
         input.focus();
@@ -607,7 +669,7 @@ const WyvernApp = {
                     item.className = 'pinned-item';
                     item.innerHTML = `
                         <div class="pinned-author">${this.escapeHtml(m.auteur_pseudo)}</div>
-                        <div class="pinned-text">${this.escapeHtml(m.contenu_chiffre)}</div>
+                        <div class="pinned-text">${this.escapeHtml(this.decryptContent(m))}</div>
                         <div class="pinned-time">${this.formatTime(m.horodatage)}</div>
                     `;
                     list.appendChild(item);
@@ -827,6 +889,7 @@ const WyvernApp = {
         //logout
         document.getElementById('btn-logout').addEventListener('click', async () => {
             await this.api('/logout', 'POST');
+            sessionStorage.removeItem('e2e_pk');
             window.location.href = '/login';
         });
 

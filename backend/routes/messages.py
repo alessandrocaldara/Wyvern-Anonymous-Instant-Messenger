@@ -76,7 +76,9 @@ def get_messages(channel_id):
         'auteur_id': m.auteur_id,
         'auteur_pseudo': m.auteur.pseudo,
         'horodatage': m.horodatage.isoformat(),
-        'est_epingle': bool(m.est_epingle)
+        'est_epingle': bool(m.est_epingle),
+        'iv_chiffrement': m.iv_chiffrement,
+        'cle_symetrique_chiffree': m.cle_symetrique_chiffree
     } for m in messages]), 200
 
 
@@ -99,7 +101,9 @@ def get_dm(other_user_id):
         'auteur_id': m.auteur_id,
         'auteur_pseudo': m.auteur.pseudo,
         'destinataire_id': m.destinataire_id,
-        'horodatage': m.horodatage.isoformat()
+        'horodatage': m.horodatage.isoformat(),
+        'iv_chiffrement': m.iv_chiffrement,
+        'cle_symetrique_chiffree': m.cle_symetrique_chiffree
     } for m in messages]), 200
 
 
@@ -117,6 +121,11 @@ def edit_message(message_id):
         return jsonify({'error': 'Contenu requis'}), 400
 
     message.contenu_chiffre = nouveau
+    #mettre à jour les champs E2E si présents
+    if 'iv_chiffrement' in data:
+        message.iv_chiffrement = data['iv_chiffrement']
+    if 'cle_symetrique_chiffree' in data:
+        message.cle_symetrique_chiffree = data['cle_symetrique_chiffree']
     db.session.commit()
     return jsonify({'message': 'Message modifié'}), 200
 
@@ -181,7 +190,9 @@ def get_pinned(channel_id):
         'contenu_chiffre': m.contenu_chiffre,
         'auteur_id': m.auteur_id,
         'auteur_pseudo': m.auteur.pseudo,
-        'horodatage': m.horodatage.isoformat()
+        'horodatage': m.horodatage.isoformat(),
+        'iv_chiffrement': m.iv_chiffrement,
+        'cle_symetrique_chiffree': m.cle_symetrique_chiffree
     } for m in messages]), 200
 
 
@@ -209,5 +220,7 @@ def search_messages(channel_id):
         'contenu_chiffre': m.contenu_chiffre,
         'auteur_id': m.auteur_id,
         'auteur_pseudo': m.auteur.pseudo,
-        'horodatage': m.horodatage.isoformat()
+        'horodatage': m.horodatage.isoformat(),
+        'iv_chiffrement': m.iv_chiffrement,
+        'cle_symetrique_chiffree': m.cle_symetrique_chiffree
     } for m in messages]), 200

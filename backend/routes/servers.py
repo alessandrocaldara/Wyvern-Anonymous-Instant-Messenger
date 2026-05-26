@@ -3,7 +3,7 @@ import string
 from datetime import datetime
 from flask import Blueprint, request, jsonify, session
 from extensions import db
-from models import Server, Permission, Channel, ServerBan
+from models import Server, Permission, Channel, ServerBan, User
 from routes.auth import login_required
 
 servers_bp = Blueprint('servers', __name__)
@@ -181,6 +181,29 @@ def get_members(server_id):
             'role': p.role
         })
     return jsonify(members), 200
+
+
+@servers_bp.route('/api/servers/<int:server_id>/members_keys', methods=['GET'])
+@login_required
+def get_members_keys(server_id):
+    """Liste des clés publiques de tous les membres (pour chiffrement E2E salon)."""
+    perm = Permission.query.filter_by(
+        utilisateur_id=session['user_id'],
+        serveur_id=server_id
+    ).first()
+    if not perm:
+        return jsonify({'error': 'Accès refusé'}), 403
+
+    perms = Permission.query.filter_by(serveur_id=server_id).all()
+    members_keys = []
+    for p in perms:
+        user = User.query.get(p.utilisateur_id)
+        if user and user.cle_publique:
+            members_keys.append({
+                'user_id': user.id,
+                'cle_publique': user.cle_publique
+            })
+    return jsonify(members_keys), 200
 
 
 @servers_bp.route('/api/servers/<int:server_id>/members/<int:user_id>/role', methods=['PUT'])

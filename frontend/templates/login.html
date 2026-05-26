@@ -30,6 +30,7 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/crypto.js') }}"></script>
 <script>
     // Login au clic
     document.getElementById('loginBtn').addEventListener('click', doLogin);
@@ -65,6 +66,21 @@
             const data = await res.json();
 
             if (res.ok) {
+                //déchiffrer la clé privée E2E en mémoire
+                if (data.cle_privee_chiffree) {
+                    try {
+                        btn.textContent = 'Déchiffrement clé E2E...';
+                        const privateKey = WyvernCrypto.recoverPrivateKey(
+                            data.cle_privee_chiffree, password
+                        );
+                        //stocker en mémoire JS uniquement (effacée au reload/déconnexion)
+                        window.__wyvernPrivateKey = privateKey;
+                        sessionStorage.setItem('e2e_pk', privateKey.toString(16));
+                        console.log('[E2E] Clé privée déchiffrée et chargée en mémoire');
+                    } catch (e) {
+                        console.warn('[E2E] Échec déchiffrement clé privée:', e.message);
+                    }
+                }
                 window.location.href = '/chat';
             } else {
                 errorEl.textContent = data.error;

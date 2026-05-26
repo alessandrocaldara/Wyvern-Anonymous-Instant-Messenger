@@ -48,4 +48,6 @@ Lib/
 Scripts/
 Include/
 
-
+# Fichiers de test
+backend/seede2ee.py
+frontend/static/js/crypto_test.html

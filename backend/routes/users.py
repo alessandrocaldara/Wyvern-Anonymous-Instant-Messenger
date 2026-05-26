@@ -73,6 +73,10 @@ def update_profile():
 
         user.mot_de_passe_hash = generate_password_hash(new_password)
 
+        #re-chiffrer la clé privée E2E avec le nouveau mot de passe
+        if 'cle_privee_chiffree' in data:
+            user.cle_privee_chiffree = data['cle_privee_chiffree']
+
     db.session.commit()
 
     return jsonify({
@@ -113,4 +117,31 @@ def get_user(user_id):
         'pseudo': user.pseudo,
         'photo_profil': user.photo_profil,
         'created_at': user.created_at.isoformat()
+    }), 200
+
+
+# ── Routes E2E ───────────────────────────────────────────────────────
+
+@users_bp.route('/api/users/<int:user_id>/pubkey', methods=['GET'])
+@login_required
+def get_pubkey(user_id):
+    """Retourne la clé publique d'un utilisateur (pour chiffrer un DM)."""
+    user = User.query.get_or_404(user_id)
+    if not user.cle_publique:
+        return jsonify({'error': 'Cet utilisateur n\'a pas de clé publique'}), 404
+    return jsonify({
+        'user_id': user.id,
+        'cle_publique': user.cle_publique
+    }), 200
+
+
+@users_bp.route('/api/users/me/private_key', methods=['GET'])
+@login_required
+def get_private_key():
+    """Retourne la clé privée chiffrée de l'utilisateur connecté."""
+    user = User.query.get(session['user_id'])
+    if not user or not user.cle_privee_chiffree:
+        return jsonify({'error': 'Pas de clé privée enregistrée'}), 404
+    return jsonify({
+        'cle_privee_chiffree': user.cle_privee_chiffree
     }), 200

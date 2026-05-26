@@ -61,13 +61,19 @@ def register():
     if User.query.filter_by(pseudo=pseudo).first():
         return jsonify({'error': 'Ce pseudo est déjà pris'}), 409
 
+    #clés E2E (générées côté client, transmises à l'inscription)
+    cle_publique = data.get('cle_publique')
+    cle_privee_chiffree = data.get('cle_privee_chiffree')
+
     #création du compte
     code = generate_code_16()
     user = User(
         pseudo=pseudo,
         mot_de_passe_hash=generate_password_hash(password),
         code_16_chiffres=code,
-        email=email
+        email=email,
+        cle_publique=cle_publique,
+        cle_privee_chiffree=cle_privee_chiffree
     )
     db.session.add(user)
     db.session.commit()
@@ -106,7 +112,8 @@ def login():
     return jsonify({
         'message': 'Connexion réussie!!',
         'user_id': user.id,
-        'pseudo': user.pseudo
+        'pseudo': user.pseudo,
+        'cle_privee_chiffree': user.cle_privee_chiffree
     }), 200
 
 

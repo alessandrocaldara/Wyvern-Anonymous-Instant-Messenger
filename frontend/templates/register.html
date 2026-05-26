@@ -53,6 +53,7 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/crypto.js') }}"></script>
 <script>
     document.getElementById('registerBtn').addEventListener('click', doRegister);
 
@@ -86,16 +87,25 @@
 
         const btn = document.getElementById('registerBtn');
         btn.disabled = true;
-        btn.textContent = 'Création...';
+        btn.textContent = 'Génération des clés E2E...';
 
         try {
+            //générer la paire de clés E2E
+            const keypair = WyvernCrypto.generateKeypair();
+            const clePublique = WyvernCrypto.serializePoint(keypair.publicKey);
+            const clePriveeChiffree = WyvernCrypto.protectPrivateKey(keypair.privateKey, password);
+
+            btn.textContent = 'Création du compte...';
+
             const res = await fetch('/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     pseudo,
                     password,
-                    email: email || null
+                    email: email || null,
+                    cle_publique: clePublique,
+                    cle_privee_chiffree: clePriveeChiffree
                 })
             });
             const data = await res.json();

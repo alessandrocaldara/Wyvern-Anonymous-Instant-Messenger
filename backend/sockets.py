@@ -85,11 +85,13 @@ def handle_send_message(data):
         emit('error', {'message': 'Accès refusé'})
         return
 
-    # Enregistrer en BDD
+    # Enregistrer en BDD (avec champs E2E si présents)
     msg = Message(
         contenu_chiffre=contenu,
         auteur_id=session['user_id'],
-        salon_id=channel_id
+        salon_id=channel_id,
+        iv_chiffrement=data.get('iv_chiffrement'),
+        cle_symetrique_chiffree=data.get('cle_symetrique_chiffree')
     )
     db.session.add(msg)
     db.session.commit()
@@ -102,7 +104,9 @@ def handle_send_message(data):
         'auteur_pseudo': session['pseudo'],
         'channel_id': channel_id,
         'horodatage': msg.horodatage.isoformat(),
-        'est_epingle': False
+        'est_epingle': False,
+        'iv_chiffrement': msg.iv_chiffrement,
+        'cle_symetrique_chiffree': msg.cle_symetrique_chiffree
     }, room=f'channel_{channel_id}')
 
 
@@ -119,7 +123,9 @@ def handle_send_dm(data):
     msg = Message(
         contenu_chiffre=contenu,
         auteur_id=session['user_id'],
-        destinataire_id=destinataire_id
+        destinataire_id=destinataire_id,
+        iv_chiffrement=data.get('iv_chiffrement'),
+        cle_symetrique_chiffree=data.get('cle_symetrique_chiffree')
     )
     db.session.add(msg)
     db.session.commit()
@@ -131,7 +137,9 @@ def handle_send_dm(data):
         'auteur_id': msg.auteur_id,
         'auteur_pseudo': session['pseudo'],
         'destinataire_id': destinataire_id,
-        'horodatage': msg.horodatage.isoformat()
+        'horodatage': msg.horodatage.isoformat(),
+        'iv_chiffrement': msg.iv_chiffrement,
+        'cle_symetrique_chiffree': msg.cle_symetrique_chiffree
     }
     emit('new_dm', payload, room=f'user_{destinataire_id}')
     emit('new_dm', payload, room=f'user_{session["user_id"]}')
