@@ -1,6 +1,6 @@
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
 from extensions import db
 from models import Server, Permission, Channel, ServerBan, User
@@ -206,6 +206,32 @@ def get_members_keys(server_id):
     return jsonify(members_keys), 200
 
 
+@servers_bp.route('/api/servers/<int:server_id>/bans', methods=['GET'])
+@login_required
+def get_bans(server_id):
+    """Liste les bannissements actifs d'un serveur (admin/propriétaire uniquement)."""
+    my_perm = Permission.query.filter_by(
+        utilisateur_id=session['user_id'],
+        serveur_id=server_id
+    ).first()
+    if not my_perm or my_perm.role != 'admin':
+        return jsonify({'error': 'Permissions insuffisantes'}), 403
+
+    bans = ServerBan.query.filter_by(serveur_id=server_id).all()
+    result = []
+    for b in bans:
+        # Ignorer les bans temporaires expirés
+        if b.date_fin is not None and b.date_fin <= datetime.utcnow():
+            continue
+        result.append({
+            'user_id': b.utilisateur_id,
+            'pseudo': b.utilisateur.pseudo,
+            'raison': b.raison_chiffree,
+            'date_fin': b.date_fin.isoformat() if b.date_fin else None
+        })
+    return jsonify(result), 200
+
+
 @servers_bp.route('/api/servers/<int:server_id>/members/<int:user_id>/role', methods=['PUT'])
 @login_required
 def change_role(server_id, user_id):
@@ -229,6 +255,55 @@ def change_role(server_id, user_id):
     perm.role = new_role
     db.session.commit()
     return jsonify({'message': f'Rôle mis à jour : {new_role}'}), 200
+
+
+@servers_bp.route('/api/servers/<int:server_id>/members/<int:user_id>/promote', methods=['POST'])
+@login_required
+def promote_member(server_id, user_id):
+    """Promouvoir un membre en admin (admin/propriétaire uniquement)."""
+    my_perm = Permission.query.filter_by(
+        utilisateur_id=session['user_id'],
+        serveur_id=server_id
+    ).first()
+    if not my_perm or my_perm.role != 'admin':
+        return jsonify({'error': 'Seul un admin peut promouvoir'}), 403
+
+    perm = Permission.query.filter_by(
+        utilisateur_id=user_id,
+        serveur_id=server_id
+    ).first()
+    if not perm:
+        return jsonify({'error': 'Utilisateur non membre du serveur'}), 404
+    if perm.role == 'admin':
+        return jsonify({'error': 'Cet utilisateur est déjà admin'}), 409
+
+    perm.role = 'admin'
+    db.session.commit()
+    return jsonify({'message': 'Membre promu admin'}), 200
+
+
+@servers_bp.route('/api/servers/<int:server_id>/members/<int:user_id>/demote', methods=['POST'])
+@login_required
+def demote_member(server_id, user_id):
+    """Rétrograder un admin en membre normal (propriétaire uniquement)."""
+    server = Server.query.get_or_404(server_id)
+    if server.proprietaire_id != session['user_id']:
+        return jsonify({'error': 'Seul le propriétaire peut rétrograder un admin'}), 403
+    if user_id == server.proprietaire_id:
+        return jsonify({'error': 'Le propriétaire ne peut pas être rétrogradé'}), 403
+
+    perm = Permission.query.filter_by(
+        utilisateur_id=user_id,
+        serveur_id=server_id
+    ).first()
+    if not perm:
+        return jsonify({'error': 'Utilisateur non membre du serveur'}), 404
+    if perm.role == 'normal':
+        return jsonify({'error': 'Cet utilisateur n\'est pas admin'}), 409
+
+    perm.role = 'normal'
+    db.session.commit()
+    return jsonify({'message': 'Admin rétrogradé en membre normal'}), 200
 
 
 @servers_bp.route('/api/servers/<int:server_id>/members/<int:user_id>', methods=['DELETE'])
@@ -262,7 +337,8 @@ def kick_member(server_id, user_id):
 @servers_bp.route('/api/servers/<int:server_id>/ban/<int:user_id>', methods=['POST'])
 @login_required
 def ban_member(server_id, user_id):
-    """Bannir un membre (admin/propriétaire uniquement)."""
+    """Bannir un membre (admin/propriétaire uniquement).
+    Accepte une raison et une durée optionnelle (duree_secondes)."""
     my_perm = Permission.query.filter_by(
         utilisateur_id=session['user_id'],
         serveur_id=server_id
@@ -277,6 +353,18 @@ def ban_member(server_id, user_id):
     data = request.get_json() or {}
     raison = data.get('raison', '')
 
+    # Durée optionnelle : si fournie, calcule la date de fin du ban
+    date_fin = None
+    duree = data.get('duree_secondes')
+    if duree is not None:
+        try:
+            duree = int(duree)
+            if duree <= 0:
+                return jsonify({'error': 'La durée doit être positive'}), 400
+            date_fin = datetime.utcnow() + timedelta(seconds=duree)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Durée invalide'}), 400
+
     # Supprimer d'abord la permission (kick)
     perm = Permission.query.filter_by(
         utilisateur_id=user_id,
@@ -285,12 +373,40 @@ def ban_member(server_id, user_id):
     if perm:
         db.session.delete(perm)
 
-    # Ajouter le ban
-    ban = ServerBan(
-        serveur_id=server_id,
-        utilisateur_id=user_id,
-        raison_chiffree=raison
-    )
-    db.session.add(ban)
+    # Mettre à jour un ban existant ou en créer un nouveau
+    ban = ServerBan.query.filter_by(serveur_id=server_id, utilisateur_id=user_id).first()
+    if ban:
+        ban.raison_chiffree = raison
+        ban.date_fin = date_fin
+        ban.created_at = datetime.utcnow()
+    else:
+        ban = ServerBan(
+            serveur_id=server_id,
+            utilisateur_id=user_id,
+            raison_chiffree=raison,
+            date_fin=date_fin
+        )
+        db.session.add(ban)
+
     db.session.commit()
     return jsonify({'message': 'Membre banni'}), 200
+
+
+@servers_bp.route('/api/servers/<int:server_id>/unban/<int:user_id>', methods=['DELETE'])
+@login_required
+def unban_member(server_id, user_id):
+    """Révoquer le bannissement d'un utilisateur (admin/propriétaire uniquement)."""
+    my_perm = Permission.query.filter_by(
+        utilisateur_id=session['user_id'],
+        serveur_id=server_id
+    ).first()
+    if not my_perm or my_perm.role != 'admin':
+        return jsonify({'error': 'Permissions insuffisantes'}), 403
+
+    ban = ServerBan.query.filter_by(serveur_id=server_id, utilisateur_id=user_id).first()
+    if not ban:
+        return jsonify({'error': 'Cet utilisateur n\'est pas banni'}), 404
+
+    db.session.delete(ban)
+    db.session.commit()
+    return jsonify({'message': 'Bannissement révoqué'}), 200

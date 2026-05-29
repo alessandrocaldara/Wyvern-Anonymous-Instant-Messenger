@@ -612,6 +612,13 @@ const WyvernApp = {
         const text = input.value.trim();
         if (!text) return;
 
+        //intercepter les commandes slash avant l'envoi
+        if (await WyvernCommands.tryExecute(text)) {
+            input.value = '';
+            input.focus();
+            return;
+        }
+
         if (this.currentView === 'channel' && this.currentChannelId) {
             await WyvernSocket.sendMessage(text, this.currentChannelId);
         } else if (this.currentView === 'dm' && this.currentDmUserId) {
